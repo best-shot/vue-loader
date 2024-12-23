@@ -58,6 +58,8 @@ export interface VueLoaderOptions {
   experimentalInlineMatchResource?: boolean
 
   isServerBuild?: boolean
+
+  parse?: typeof compiler.parse
 }
 
 let errorEmitted = false
@@ -116,7 +118,9 @@ export default function loader(
 
   const filename = resourcePath.replace(/\?.*$/, '')
 
-  const { descriptor, errors } = parse(source, {
+  const parseFunc = options.parse || parse
+
+  const { descriptor, errors } = parseFunc(source, {
     filename,
     sourceMap,
     templateParseOptions: options.compilerOptions,
