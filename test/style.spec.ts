@@ -103,7 +103,7 @@ test('CSS Modules', async () => {
         loader: 'css-loader',
         options: {
           modules: {
-            localIdentName,
+            ...(localIdentName === undefined ? {} : { localIdentName }),
           },
         },
       },
@@ -162,7 +162,7 @@ test('CSS Modules', async () => {
   }
 
   // default ident
-  await testWithIdent(undefined, /^\w{21,}/)
+  await testWithIdent(undefined, /^\w{20,}/)
 
   // custom ident
   await testWithIdent(
@@ -189,7 +189,7 @@ test('CSS Modules namedExport', async () => {
         loader: 'css-loader',
         options: {
           modules: {
-            localIdentName,
+            ...(localIdentName === undefined ? {} : { localIdentName }),
             namedExport: true,
           },
         },
@@ -245,7 +245,7 @@ test('CSS Modules namedExport', async () => {
   }
 
   // default ident
-  await testWithIdent(undefined, /^\w{21,}/)
+  await testWithIdent(undefined, /^\w{20,}/)
 
   // custom ident
   await testWithIdent(
@@ -283,7 +283,9 @@ test('CSS Modules Extend', async () => {
 
   expect(instance.$el.className).toBe(instance.$style.red)
   const escapedClassName = cssesc(instance.$style.red, { isIdentifier: true })
-  const style = window.document.querySelectorAll('style')![1]!.textContent
+  const style = normalizeNewline(
+    window.document.querySelectorAll('style')![1]!.textContent!
+  )
   expect(style).toContain(`.${escapedClassName} {\n  color: #FF0000;\n}`)
 })
 

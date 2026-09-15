@@ -14,7 +14,6 @@ type Loader = LoaderContext<VueLoaderOptions>['loaders'][number]
 const isESLintLoader = (l: Loader) => /(\/|\\|@)eslint-loader/.test(l.path)
 const isNullLoader = (l: Loader) => /(\/|\\|@)null-loader/.test(l.path)
 const isCSSLoader = (l: Loader) => /(\/|\\|@)css-loader/.test(l.path)
-const isCacheLoader = (l: Loader) => /(\/|\\|@)cache-loader/.test(l.path)
 const isNotPitcher = (l: Loader) => l.path !== __filename
 
 const pitcher: LoaderDefinitionFunction = (code) => code
@@ -119,8 +118,7 @@ export const pitch = function () {
     }
   }
 
-  // if a custom block has no other matching loader other than vue-loader itself
-  // or cache-loader, we should ignore it
+  // if a custom block has no other matching loader besides vue-loader, ignore it
   if (query.type === `custom` && shouldIgnoreCustomBlock(loaders)) {
     return ``
   }
@@ -187,10 +185,6 @@ function shouldIgnoreCustomBlock(loaders: Loader[]) {
   const actualLoaders = loaders.filter((loader) => {
     // vue-loader
     if (loader.path === selfPath) {
-      return false
-    }
-    // cache-loader
-    if (isCacheLoader(loader)) {
       return false
     }
     return true
