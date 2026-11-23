@@ -1,7 +1,7 @@
-import values from './duplicate-cssm.css'
+import { color } from './duplicate-cssm.css'
 import Comp from './duplicate-cssm.vue'
 
-export { values }
+export { color }
 export default Comp
 
-window.exports = values
+window.exports = { color }

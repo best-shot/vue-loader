@@ -39,7 +39,8 @@ test('pre-processors', async () => {
         },
         {
           test: /\.stylus$/,
-          use: ['style-loader', 'css-loader', 'stylus-loader'],
+          type: 'css',
+          use: ['stylus-loader'],
         },
       ],
     },
@@ -74,12 +75,13 @@ test('style import', async () => {
     entry: 'style-import.vue',
   })
 
-  const styles = window.document.querySelectorAll('style')
-  expect(styles[0].textContent).toContain('h1 { color: red; }')
+  const styles = Array.from(window.document.querySelectorAll('style'))
+  const css = normalizeNewline(styles.map((style) => style.textContent).join('\n'))
+  expect(css).toContain('h1 { color: red; }')
 
   // import with scoped
   const id = 'data-v-' + genId('style-import.vue')
-  expect(styles[1].textContent).toContain('h1[' + id + '] { color: green;\n}')
+  expect(css).toContain('h1[' + id + '] { color: green;\n}')
 })
 
 test('style import for a same file twice', async () => {
@@ -87,15 +89,15 @@ test('style import for a same file twice', async () => {
     entry: 'style-import-twice.vue',
   })
 
-  const styles = window.document.querySelectorAll('style')
-  expect(styles.length).toBe(3)
-  expect(styles[0].textContent).toContain('h1 { color: red; }')
+  const styles = Array.from(window.document.querySelectorAll('style'))
+  const css = normalizeNewline(styles.map((style) => style.textContent).join('\n'))
+  expect(css).toContain('h1 { color: red; }')
 
   // import with scoped
   const id = 'data-v-' + genId('style-import-twice-sub.vue')
-  expect(styles[1].textContent).toContain('h1[' + id + '] { color: green;\n}')
+  expect(css).toContain('h1[' + id + '] { color: green;\n}')
   const id2 = 'data-v-' + genId('style-import-twice.vue')
-  expect(styles[2].textContent).toContain('h1[' + id2 + '] { color: green;\n}')
+  expect(css).toContain('h1[' + id2 + '] { color: green;\n}')
 })
 
 test('template import', async () => {
@@ -152,14 +154,7 @@ test('cloned rules should not intefere with each other', async () => {
         },
         {
           test: /\.some-random-extension$/,
-          use: [
-            {
-              loader: 'css-loader',
-              options: {
-                url: true,
-              },
-            },
-          ],
+          type: 'css',
         },
       ],
     },

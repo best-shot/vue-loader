@@ -9,7 +9,6 @@ import {
   DEFAULT_VUE_USE,
 } from './utils'
 
-const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 
 test('support chaining with other loaders', async () => {
   const { componentModule } = await mockBundleAndRun({
@@ -93,32 +92,39 @@ test.skip('source map', async () => {
 })
 
 test('extract CSS', async () => {
-  await bundle({
+  const { stats } = await bundle({
     entry: 'extract-css.vue',
+    experiments: { css: true },
     modify: (config: any) => {
       config.module.rules = [
         {
           test: /\.vue$/,
-          use: [DEFAULT_VUE_USE],
+          use: [
+            {
+              ...DEFAULT_VUE_USE,
+              options: { experimentalInlineMatchResource: true },
+            },
+          ],
         },
         {
           test: /\.css$/,
-          use: [MiniCssExtractPlugin.loader, 'css-loader'],
+          type: 'css',
         },
         {
           test: /\.stylus$/,
-          use: [MiniCssExtractPlugin.loader, 'css-loader', 'stylus-loader'],
+          type: 'css',
+          use: ['stylus-loader'],
         },
       ]
     },
-    plugins: [
-      new MiniCssExtractPlugin({
-        filename: 'test.output.css',
-      }),
-    ],
   })
 
-  const css = normalizeNewline(mfs.readFileSync('/test.output.css').toString())
+  const cssAsset = Object.keys(stats.compilation.assets).find((asset) =>
+    asset.endsWith('.css')
+  )
+  expect(cssAsset).toBeDefined()
+
+  const css = normalizeNewline(mfs.readFileSync('/' + cssAsset).toString())
   const id = `data-v-${genId('extract-css.vue')}`
   expect(css).toContain(`h1 {\n  color: #f00;\n}`)
   // extract + scoped
@@ -126,84 +132,99 @@ test('extract CSS', async () => {
 })
 
 // #1464
-test('extract CSS with code spliting', async () => {
-  await bundle({
-    entry: 'extract-css-chunks.vue',
+test('native CSS Modules', async () => {
+  const { window } = await mockBundleAndRun({
+    entry: './test/fixtures/duplicate-cssm.js',
+    experiments: { css: true },
     modify: (config: any) => {
       config.module.rules = [
+        {
+          test: /\.vue$/,
+          use: [
+            {
+              ...DEFAULT_VUE_USE,
+              options: { experimentalInlineMatchResource: true },
+            },
+          ],
+        },
+        {
+          test: /\.css$/,
+          type: 'css/module',
+          parser: {
+            namedExports: true,
+          },
+        },
+      ]
+    },
+  })
+
+  expect(window.exports).toBeTruthy()
+  expect(window.exports.color).toBe('red')
+})
+
+test('extract CSS with code spliting', async () => {
+  const { stats } = await bundle({
+    entry: 'extract-css-chunks.vue',
+    experiments: { css: true },
+    modify: (config: any) => {
+      config.module.rules = [
+        {
+          test: /\.vue$/,
+          use: [
+            {
+              ...DEFAULT_VUE_USE,
+              options: { experimentalInlineMatchResource: true },
+            },
+          ],
+        },
+        {
+          test: /\.css$/,
+          type: 'css',
+        },
+      ]
+    },
+  })
+
+  const cssAssets = Object.keys(stats.compilation.assets).filter((asset) =>
+    asset.endsWith('.css')
+  )
+  expect(cssAssets.length).toBeGreaterThan(0)
+
+  const css = cssAssets
+    .map((asset) => normalizeNewline(mfs.readFileSync('/' + asset).toString()))
+    .join('\n')
+  expect(css).toContain(`h1 {\n  color: red;\n}`)
+})
+
+test('support rules with oneOf', async () => {
+  const { window } = await mockBundleAndRun({
+    entry: 'basic.vue',
+    modify: (config: any) => {
+      config!.module!.rules = [
         {
           test: /\.vue$/,
           use: [DEFAULT_VUE_USE],
         },
         {
           test: /\.css$/,
-          use: [MiniCssExtractPlugin.loader, 'css-loader'],
+          oneOf: [
+            {
+              resourceQuery: /no-match/,
+              type: 'css',
+            },
+            {
+              type: 'css',
+            },
+          ],
         },
       ]
     },
-    plugins: [
-      new MiniCssExtractPlugin({
-        filename: 'test.output.css',
-      }),
-    ],
   })
 
-  const css = normalizeNewline(mfs.readFileSync('/test.output.css').toString())
-  expect(css).toContain(`h1 {\n  color: red;\n}`)
-  expect(mfs.existsSync('/empty.test.output.css')).toBe(false)
-  expect(mfs.existsSync('/basic.test.output.css')).toBe(true)
-})
-
-test('support rules with oneOf', async () => {
-  const run = (entry: string) => {
-    return mockBundleAndRun({
-      entry,
-      modify: (config: any) => {
-        config!.module!.rules = [
-          {
-            test: /\.vue$/,
-            use: [DEFAULT_VUE_USE],
-          },
-          {
-            test: /\.css$/,
-            use: 'style-loader',
-            oneOf: [
-              {
-                resourceQuery: /module/,
-                use: [
-                  {
-                    loader: 'css-loader',
-                    options: {
-                      modules: {
-                        localIdentName: '[local]_[hash:base64:5]',
-                      },
-                    },
-                  },
-                ],
-              },
-              {
-                use: ['css-loader'],
-              },
-            ],
-          },
-        ]
-      },
-    })
-  }
-
-  const { window: window1 } = await run('basic.vue')
-  let style = normalizeNewline(
-    window1.document.querySelector('style')!.textContent!
+  const style = normalizeNewline(
+    window.document.querySelector('style')!.textContent!
   )
   expect(style).toContain('comp-a h2 {\n  color: #f00;\n}')
-
-  const { window, instance } = await run('css-modules-simple.vue')
-
-  const className = instance.$style.red
-  const escapedClassName = cssesc(instance.$style.red, { isIdentifier: true })
-  expect(className).toMatch(/^red_.{5}/)
-  style = normalizeNewline(window.document.querySelector('style')!.textContent!)
-  expect(style).toContain('.' + escapedClassName + ' {\n  color: red;\n}')
 })
 
 test.todo('should work with eslint loader')

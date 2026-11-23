@@ -102,7 +102,7 @@ In a nutshell, the combination of webpack and `vue-loader` gives you a modern, f
 
    Notice the `vue-loader` is also matched because `vue-loader` are applied to `.vue` files.
 
-   Similarly, if you have configured `style-loader` + `css-loader` + `sass-loader` for `*.scss` files:
+   Similarly, if you have configured the native CSS pipeline with `sass-loader` for `*.scss` files:
 
    ```html
    <style scoped lang="scss">
@@ -117,7 +117,7 @@ In a nutshell, the combination of webpack and `vue-loader` gives you a modern, f
    And webpack will expand it to:
 
    ```js
-   import 'style-loader!css-loader!sass-loader!vue-loader!source.vue?vue&type=style&index=1&scoped&lang=scss'
+   import 'sass-loader!vue-loader!source.vue?vue&type=style&index=1&scoped&lang=scss'
    ```
 
 3. When processing the expanded requests, the main `vue-loader` will get invoked again. This time though, the loader notices that the request has queries and is targeting a specific block only. So it selects (`src/select.ts`) the inner content of the target block and passes it on to the loaders matched after it.
@@ -125,7 +125,7 @@ In a nutshell, the combination of webpack and `vue-loader` gives you a modern, f
 4. For the `<script>` block, this is pretty much it. For `<template>` and `<style>` blocks though, a few extra tasks need to be performed:
 
    - We need to compile the template using the Vue template compiler;
-   - We need to post-process the CSS in `<style scoped>` blocks, **after** `css-loader` but **before** `style-loader`.
+   - We need to post-process the CSS in `<style scoped>` blocks before it reaches Webpack's native CSS pipeline.
 
    Technically, these are additional loaders (`src/templateLoader.ts` and `src/stylePostLoader.ts`) that need to be injected into the expanded loader chain. It would be very complicated if the end users have to configure this themselves, so `VueLoaderPlugin` also injects a global [Pitching Loader](https://webpack.js.org/api/loaders/#pitching-loader) (`src/pitcher.ts`) that intercepts Vue `<template>` and `<style>` requests and injects the necessary loaders. The final requests look like the following:
 
@@ -134,5 +134,5 @@ In a nutshell, the combination of webpack and `vue-loader` gives you a modern, f
    import 'vue-loader/template-loader!pug-loader!source.vue?vue&type=template'
 
    // <style scoped lang="scss">
-   import 'style-loader!vue-loader/style-post-loader!css-loader!sass-loader!vue-loader!source.vue?vue&type=style&index=1&scoped&lang=scss'
+   import 'vue-loader/style-post-loader!sass-loader!vue-loader!source.vue?vue&type=style&index=1&scoped&lang=scss'
    ```

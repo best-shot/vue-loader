@@ -6,22 +6,19 @@ import { VueLoaderOptions } from '.'
 const selfPath = require.resolve('./index')
 // const templateLoaderPath = require.resolve('./templateLoader')
 const stylePostLoaderPath = require.resolve('./stylePostLoader')
-const styleInlineLoaderPath = require.resolve('./styleInlineLoader')
 
 // @types/webpack doesn't provide the typing for loaderContext.loaders...
 type Loader = LoaderContext<VueLoaderOptions>['loaders'][number]
 
 const isESLintLoader = (l: Loader) => /(\/|\\|@)eslint-loader/.test(l.path)
 const isNullLoader = (l: Loader) => /(\/|\\|@)null-loader/.test(l.path)
-const isCSSLoader = (l: Loader) => /(\/|\\|@)css-loader/.test(l.path)
-const isCacheLoader = (l: Loader) => /(\/|\\|@)cache-loader/.test(l.path)
 const isNotPitcher = (l: Loader) => l.path !== __filename
 
 const pitcher: LoaderDefinitionFunction = (code) => code
 
 // This pitching loader is responsible for intercepting all vue block requests
 // and transform it into appropriate requests.
-export const pitch = function () {
+export const pitch = function (code: string) {
   const context = this as LoaderContext<VueLoaderOptions>
   const rawLoaders = context.loaders.filter(isNotPitcher)
   let loaders = rawLoaders
@@ -57,7 +54,7 @@ export const pitch = function () {
     }
   })
 
-  // Inject style-post-loader before css-loader for scoped CSS and trimming
+  // Inject style-post-loader for scoped CSS and trimming
   const isWebpack5 = testWebpack5(context._compiler)
   const options = (getOptions(context) || {}) as VueLoaderOptions
   if (query.type === `style`) {
@@ -74,10 +71,10 @@ export const pitch = function () {
         return ''
       }
 
-      if (query.inline || query.module) {
+      if (query.inline) {
         context.emitError(
           new Error(
-            '`inline` or `module` is currently not supported with `experiments.css` enabled'
+            '`inline` is currently not supported with `experiments.css` enabled'
           )
         )
         return ''
@@ -94,33 +91,29 @@ export const pitch = function () {
           context.resourceQuery
         }!=!-!${loaderString}!${context.resource}`
       )
-      return `@import ${styleRequest};`
-    }
-    const cssLoaderIndex = loaders.findIndex(isCSSLoader)
-    if (cssLoaderIndex > -1) {
-      // if inlined, ignore any loaders after css-loader and replace w/ inline
-      // loader
-      const afterLoaders =
-        query.inline != null
-          ? [styleInlineLoaderPath]
-          : loaders.slice(0, cssLoaderIndex + 1)
-      const beforeLoaders = loaders.slice(cssLoaderIndex + 1)
+      if (query.cssModuleProxy) {
+        const rawInnerQuery = context.resourceQuery.split('!=!')[0]
+        const innerQueryParams = qs.parse(rawInnerQuery.slice(1))
+        delete innerQueryParams.cssModuleProxy
+        const innerQuery = `?${qs.stringify(innerQueryParams)}`
+        const innerRequest = stringifyRequest(
+          context,
+          `${context.resourcePath}${query.lang ? `.${query.lang}` : ''}${innerQuery}!=!-!${loaderString}!${context.resource}`
+        )
+        return `import * as __cssModule from ${innerRequest}; export default __cssModule; export * from ${innerRequest};`
+      }
 
-      const { namedExport = false } = // @ts-ignore
-        loaders[cssLoaderIndex]?.options?.modules || {}
+      if (context.resourceQuery.includes('!=-!')) {
+        return code
+      }
 
-      return genProxyModule(
-        [...afterLoaders, stylePostLoaderPath, ...beforeLoaders],
-        context,
-        !!query.module || query.inline != null,
-        (query.lang as string) || 'css',
-        namedExport
-      )
+      return query.module
+        ? `import * as __cssModule from ${styleRequest}; export default __cssModule; export * from ${styleRequest};`
+        : `@import ${styleRequest};`
     }
   }
 
-  // if a custom block has no other matching loader other than vue-loader itself
-  // or cache-loader, we should ignore it
+  // if a custom block has no other matching loader besides vue-loader, ignore it
   if (query.type === `custom` && shouldIgnoreCustomBlock(loaders)) {
     return ``
   }
@@ -187,10 +180,6 @@ function shouldIgnoreCustomBlock(loaders: Loader[]) {
   const actualLoaders = loaders.filter((loader) => {
     // vue-loader
     if (loader.path === selfPath) {
-      return false
-    }
-    // cache-loader
-    if (isCacheLoader(loader)) {
       return false
     }
     return true

@@ -3,7 +3,6 @@ import * as path from 'path'
 import * as crypto from 'crypto'
 import webpack from 'webpack'
 import merge from 'webpack-merge'
-// import MiniCssExtractPlugin from 'mini-css-extract-plugin'
 import { fs as mfs } from 'memfs'
 import { JSDOM, VirtualConsole } from 'jsdom'
 import { VueLoaderPlugin } from '..'
@@ -16,13 +15,17 @@ function hash(text: string): string {
 export const DEFAULT_VUE_USE = {
   loader: 'vue-loader',
   options: {
-    experimentalInlineMatchResource: Boolean(process.env.INLINE_MATCH_RESOURCE),
+    experimentalInlineMatchResource: true,
   },
 }
 
 const baseConfig: webpack.Configuration = {
   mode: 'development',
   devtool: false,
+  experiments: {
+    css: true,
+    html: true,
+  },
   output: {
     path: '/',
     filename: 'test.build.js',
@@ -44,13 +47,15 @@ const baseConfig: webpack.Configuration = {
       },
       {
         test: /\.ts$/,
-        loader: process.env.WEBPACK4
-          ? require.resolve('ts-loader')
-          : require.resolve('ts-loader-v9'),
+        loader: require.resolve('ts-loader'),
         options: {
           transpileOnly: true,
           appendTsSuffixTo: [/\.vue$/],
         },
+      },
+      {
+        test: /\.css$/,
+        type: 'css',
       },
     ],
   },
@@ -61,9 +66,6 @@ const baseConfig: webpack.Configuration = {
       __VUE_PROD_DEVTOOLS__: false,
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
     }),
-    // new MiniCssExtractPlugin({
-    //   filename: '[name].css',
-    // }),
   ],
 }
 
@@ -81,19 +83,10 @@ export function bundle(
 }> {
   let config: BundleOptions = merge({}, baseConfig, options)
 
-  if (!options.experiments?.css) {
-    config.module?.rules?.push({
-      test: /\.css$/,
-      use: ['style-loader', 'css-loader'],
-    })
-  }
-
   if (config.vue && config.module) {
     const vueOptions = {
       // Test experimental inline match resource by default
-      experimentalInlineMatchResource: Boolean(
-        process.env.INLINE_MATCH_RESOURCE
-      ),
+      experimentalInlineMatchResource: true,
       ...options.vue,
     }
 
@@ -160,7 +153,9 @@ export function bundle(
         reject(err)
       } else {
         resolve({
-          code: mfs.readFileSync('/test.build.js').toString(),
+          code: mfs.existsSync('/test.build.js')
+            ? mfs.readFileSync('/test.build.js').toString()
+            : '',
           stats: stats!,
         })
       }
@@ -177,10 +172,19 @@ export async function mockBundleAndRun(
   const dom = new JSDOM(
     `<!DOCTYPE html><html><head></head><body></body></html>`,
     {
+      url: 'http://localhost/',
       runScripts: 'outside-only',
       virtualConsole: new VirtualConsole(),
     }
   )
+  for (const asset of Object.keys(stats.compilation.assets)) {
+    if (asset.endsWith('.css')) {
+      const style = dom.window.document.createElement('style')
+      style.textContent = mfs.readFileSync('/' + asset, 'utf-8')
+      dom.window.document.head.appendChild(style)
+    }
+  }
+
   try {
     dom.window.eval(code)
   } catch (e) {

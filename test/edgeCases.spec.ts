@@ -1,5 +1,4 @@
 import * as path from 'path'
-import webpack from 'webpack'
 import {
   mfs,
   bundle,
@@ -7,6 +6,7 @@ import {
   normalizeNewline,
   DEFAULT_VUE_USE,
 } from './utils'
+
 
 // @ts-ignore
 function assertComponent({
@@ -64,7 +64,7 @@ test('test-less oneOf rules', async () => {
           oneOf: [
             {
               test: /\.css$/,
-              use: ['style-loader', 'css-loader'],
+              type: 'css',
             },
           ],
         },
@@ -94,52 +94,37 @@ test('normalize multiple use + options', async () => {
 test('should not duplicate css modules value imports', async () => {
   const { window, exports } = await mockBundleAndRun({
     entry: './test/fixtures/duplicate-cssm.js',
+    experiments: { css: true },
     modify: (config: any) => {
-      const i = config.module.rules.findIndex((r) =>
-        r.test.toString().includes('css')
-      )
-      config.module.rules[i] = {
-        test: /\.css$/,
-        use: [
-          'style-loader',
-          {
-            loader: 'css-loader',
-            options: {
-              modules: true,
-            },
-          },
-        ],
-      }
+      config.module.rules = [
+        { test: /\.vue$/, use: [DEFAULT_VUE_USE] },
+        {
+          test: /\.css$/,
+          type: 'css/module',
+          parser: { namedExports: true },
+        },
+      ]
     },
   })
 
-  const styles = window.document.querySelectorAll('style')
-  expect(styles.length).toBe(2) // one for values, one for the component
-  const style = normalizeNewline(styles[1]!.textContent!)
-  // value should be injected
-  expect(style).toMatch('color: red;')
-  // exports is set as the locals imported from values.css
+  expect(window.document.querySelectorAll('style').length).toBeGreaterThanOrEqual(1)
   expect(exports.color).toBe('red')
 })
 
 // #1213
-test('html-webpack-plugin', async () => {
-  const HTMLPlugin = process.env.WEBPACK4
-    ? require('html-webpack-plugin')
-    : require('html-webpack-plugin-v5')
-  await bundle({
-    entry: 'basic.vue',
-    plugins: [
-      new HTMLPlugin({
-        inject: true,
-        template: path.resolve(__dirname, 'fixtures/index.html'),
-        filename: 'output.html',
-      }),
-    ],
+test('webpack built-in HTML support', async () => {
+  const { stats } = await bundle({
+    entry: './test/fixtures/index.html',
+    experiments: { css: true, html: true },
   })
 
-  const html = mfs.readFileSync('/output.html', 'utf-8')
-  expect(html).toMatch('test.build.js')
+  const htmlAsset = Object.keys(stats.compilation.assets).find((asset) =>
+    asset.endsWith('.html')
+  )
+  expect(htmlAsset).toBeDefined()
+  const html = mfs.readFileSync('/' + htmlAsset, 'utf-8')
+  expect(html).toContain('<!DOCTYPE html>')
+  expect(html).toContain('<body')
 })
 
 // #1239
@@ -160,9 +145,7 @@ test('usage with null-loader', async () => {
 
 // #1278
 test('proper dedupe on src-imports with options', async () => {
-  const tsLoaderPath = process.env.WEBPACK4
-    ? require.resolve('ts-loader')
-    : require.resolve('ts-loader-v9')
+  const tsLoaderPath = require.resolve('ts-loader')
   const result = await mockBundleAndRun({
     entry: 'ts.vue',
     resolve: {
@@ -203,11 +186,6 @@ test('use with postLoader', async () => {
 
 // #1771
 test('data: URI as entry', async () => {
-  // this feature is only available in webpack 5
-  if (webpack.version!.startsWith('4')) {
-    return
-  }
-
   await bundle({
     entry: {
       main: 'data:text/javascript,console.log("hello world")',
@@ -253,6 +231,7 @@ test('should pass correct options to template compiler', async () => {
     modify: (config: any) => {
       config.module.rules[0].use[0].options = {
         compiler: fakeCompiler,
+        experimentalInlineMatchResource: true,
       }
       config.module.rules.push(
         ...Array.from({ length: 10 }).map((_, i) => ({

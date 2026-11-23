@@ -226,6 +226,12 @@ class VueLoaderPlugin {
       options: vueLoaderOptions,
     }
 
+    const cssModuleProxyRule: RawRule = {
+      test: /\.vue\.css$/,
+      resourceQuery: /cssModuleProxy=true/,
+      type: 'javascript/auto',
+    }
+
     // replace original rules
     if (enableInlineMatchResource) {
       // Match rules using `vue-loader`
@@ -260,6 +266,7 @@ class VueLoaderPlugin {
         templateCompilerRule,
         ...clonedRules,
         ...vueLoaderRules,
+        cssModuleProxyRule,
       ]
     } else {
       compiler.options.module!.rules = [
@@ -268,6 +275,7 @@ class VueLoaderPlugin {
         templateCompilerRule,
         ...clonedRules,
         ...rules,
+        cssModuleProxyRule,
       ]
     }
 

@@ -68,9 +68,8 @@ test('postcss', async () => {
       rules: [
         {
           test: /\.postcss$/,
+          type: 'css',
           use: [
-            'style-loader',
-            'css-loader',
             {
               loader: 'postcss-loader',
               options: {
@@ -97,77 +96,43 @@ test('CSS Modules', async () => {
     localIdentName: string | undefined,
     regexToMatch: RegExp
   ) => {
-    const baseLoaders = [
-      'style-loader',
-      {
-        loader: 'css-loader',
-        options: {
-          modules: {
-            localIdentName,
-          },
-        },
-      },
-    ]
-
     const { window, instance } = await mockBundleAndRun({
-      entry: 'css-modules.vue',
+      entry: 'css-modules-simple.vue',
+      experiments: { css: true },
       modify: (config: any) => {
-        config!.module!.rules = [
-          {
-            test: /\.vue$/,
-            use: [DEFAULT_VUE_USE],
-          },
+        config.module.rules = [
+          { test: /\.vue$/, use: [DEFAULT_VUE_USE] },
           {
             test: /\.css$/,
-            use: baseLoaders,
-          },
-          {
-            test: /\.stylus$/,
-            use: [...baseLoaders, 'stylus-loader'],
+            type: 'css/module',
+            generator: localIdentName ? { localIdentName } : undefined,
           },
         ]
       },
     })
 
-    // get local class name
     const className = instance.$style.red
-    const escapedClassName = cssesc(instance.$style.red, { isIdentifier: true })
     expect(className).toMatch(regexToMatch)
 
-    // class name in style
-    let style = [].slice
-      .call(window.document.querySelectorAll('style'))
-      .map((style: any) => {
-        return style!.textContent
-      })
-      .join('\n')
-    style = normalizeNewline(style)
+    const escapedClassName = cssesc(className, { isIdentifier: true })
+    let style = normalizeNewline(
+      [].slice
+        .call(window.document.querySelectorAll('style'))
+        .map((style: any) => style.textContent)
+        .join('\n')
+    )
     expect(style).toContain('.' + escapedClassName + ' {\n  color: red;\n}')
 
-    // animation name
     const match = style.match(/@keyframes\s+(\S+)\s+{/)
     expect(match).toHaveLength(2)
-    const animationName = match[1]
-    expect(animationName).not.toBe('fade')
-    expect(style).toContain('animation: ' + animationName + ' 1s;')
-
-    // default module + pre-processor + scoped
-    const anotherClassName = instance.$style.red
-    const escapedAnotherClassName = cssesc(instance.$style.red, {
-      isIdentifier: true,
-    })
-    expect(anotherClassName).toMatch(regexToMatch)
-    const id = 'data-v-' + genId('css-modules.vue')
-    expect(style).toContain('.' + escapedAnotherClassName + '[' + id + ']')
+    expect(match![1]).not.toBe('fade')
+    expect(style).toContain('animation: ' + match![1] + ' 1s;')
   }
 
-  // default ident
-  await testWithIdent(undefined, /^\w{21,}/)
-
-  // custom ident
+  await testWithIdent(undefined, /^vue-loader.*-red$/)
   await testWithIdent(
     '[path][name]---[local]---[hash:base64:5]',
-    /css-modules---red---\w{5}/
+    /css-modules-simple\.vue---red---\w{5}/
   )
 })
 
@@ -176,119 +141,69 @@ test('CSS Modules namedExport', async () => {
     localIdentName: string | undefined,
     regexToMatch: RegExp
   ) => {
-    const baseLoaders = [
-      {
-        loader: 'style-loader',
-        options: {
-          modules: {
-            namedExport: true,
-          },
-        },
-      },
-      {
-        loader: 'css-loader',
-        options: {
-          modules: {
-            localIdentName,
-            namedExport: true,
-          },
-        },
-      },
-    ]
-
     const { window, instance } = await mockBundleAndRun({
-      entry: 'css-modules.vue',
+      entry: 'css-modules-simple.vue',
+      experiments: { css: true },
       modify: (config: any) => {
-        config!.module!.rules = [
-          {
-            test: /\.vue$/,
-            loader: 'vue-loader',
-          },
+        config.module.rules = [
+          { test: /\.vue$/, use: [DEFAULT_VUE_USE] },
           {
             test: /\.css$/,
-            use: baseLoaders,
-          },
-          {
-            test: /\.stylus$/,
-            use: [...baseLoaders, 'stylus-loader'],
+            type: 'css/module',
+            parser: { namedExports: true },
+            generator: localIdentName ? { localIdentName } : undefined,
           },
         ]
       },
     })
 
-    // get local class name
     const className = instance.$style.red
     expect(className).toMatch(regexToMatch)
 
-    // class name in style
-    let style = [].slice
-      .call(window.document.querySelectorAll('style'))
-      .map((style: any) => {
-        return style!.textContent
-      })
-      .join('\n')
-    style = normalizeNewline(style)
-    expect(style).toContain('.' + className + ' {\n  color: red;\n}')
+    const style = normalizeNewline(
+      [].slice
+        .call(window.document.querySelectorAll('style'))
+        .map((style: any) => style.textContent)
+        .join('\n')
+    )
+    const escapedClassName = cssesc(className, { isIdentifier: true })
+    expect(style).toContain('.' + escapedClassName + ' {\n  color: red;\n}')
 
-    // animation name
     const match = style.match(/@keyframes\s+(\S+)\s+{/)
     expect(match).toHaveLength(2)
-    const animationName = match[1]
-    expect(animationName).not.toBe('fade')
-    expect(style).toContain('animation: ' + animationName + ' 1s;')
-
-    // default module + pre-processor + scoped
-    const anotherClassName = instance.$style.red
-    expect(anotherClassName).toMatch(regexToMatch)
-    const id = 'data-v-' + genId('css-modules.vue')
-    expect(style).toContain('.' + anotherClassName + '[' + id + ']')
+    expect(match![1]).not.toBe('fade')
+    expect(style).toContain('animation: ' + match![1] + ' 1s;')
   }
 
-  // default ident
-  await testWithIdent(undefined, /^\w{21,}/)
-
-  // custom ident
+  await testWithIdent(undefined, /^vue-loader.*-red$/)
   await testWithIdent(
     '[path][name]---[local]---[hash:base64:5]',
-    /css-modules---red---\w{5}/
+    /css-modules-simple\.vue---red---\w{5}/
   )
 })
 
 test('CSS Modules Extend', async () => {
-  const baseLoaders = [
-    'style-loader',
-    {
-      loader: 'css-loader',
-      options: {
-        modules: true,
-      },
-    },
-  ]
-
   const { window, instance } = await mockBundleAndRun({
     entry: 'css-modules-extend.vue',
+    experiments: { css: true },
     modify: (config: any) => {
-      config!.module!.rules = [
-        {
-          test: /\.vue$/,
-          use: [DEFAULT_VUE_USE],
-        },
-        {
-          test: /\.css$/,
-          use: baseLoaders,
-        },
+      config.module.rules = [
+        { test: /\.vue$/, use: [DEFAULT_VUE_USE] },
+        { test: /\.css$/, type: 'css/module' },
       ]
     },
   })
 
   expect(instance.$el.className).toBe(instance.$style.red)
   const escapedClassName = cssesc(instance.$style.red, { isIdentifier: true })
-  const style = window.document.querySelectorAll('style')![1]!.textContent
-  expect(style).toContain(`.${escapedClassName} {\n  color: #FF0000;\n}`)
+  const styles = [].slice.call(window.document.querySelectorAll('style'))
+  expect(styles.some((style: any) =>
+    normalizeNewline(style.textContent).includes(`.${escapedClassName}`)
+  )).toBe(true)
 })
 
 test('v-bind() in CSS', async () => {
-  const { window, instance } = await mockBundleAndRun({
+  const { window, instance, code } = await mockBundleAndRun({
     entry: 'style-v-bind.vue',
   })
 

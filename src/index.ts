@@ -253,7 +253,8 @@ export default function loader(
         const idQuery = !style.src || style.scoped ? `&id=${id}` : ``
         const inlineQuery = asCustomElement ? `&inline` : ``
         const externalQuery = Boolean(style.src) ? `&external` : ``
-        const query = `?vue&type=style&index=${i}${idQuery}${inlineQuery}${attrsQuery}${resourceQuery}${externalQuery}`
+        const cssModuleProxyQuery = style.module ? `&cssModuleProxy=true` : ``
+        const query = `?vue&type=style&index=${i}${idQuery}${inlineQuery}${attrsQuery}${resourceQuery}${externalQuery}${cssModuleProxyQuery}`
 
         let styleRequest
         if (enableInlineMatchResource) {

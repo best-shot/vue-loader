@@ -1,7 +1,6 @@
 const path = require('path')
 const webpack = require('webpack')
 const VueLoaderPlugin = require('../dist/plugin').default
-const MiniCssExtractPlugin = require('mini-css-extract-plugin')
 
 module.exports = (env = {}) => {
   const isProd = env.prod
@@ -15,24 +14,19 @@ module.exports = (env = {}) => {
    *    - externalize @vue/* deps via commonjs require()
    *    - externalize client side deps that are never used on the server, e.g.
    *      ones that are only used in onMounted() to empty modules
-   * 4. If using cache-loader or any other forms of cache, make sure the cache
-   *    key takes client vs. server builds into account!
    */
   const genConfig = (isServerBuild = false) => {
     const minimize = isProd && !isServerBuild && !env.noMinimize
 
     return {
       mode: isProd ? 'production' : 'development',
-      entry: path.resolve(__dirname, './main.js'),
+      entry: isServerBuild
+        ? path.resolve(__dirname, './main.js')
+        : path.resolve(__dirname, './index.html'),
       target: isServerBuild ? 'node' : 'web',
       devtool: 'source-map',
       resolve: {
         extensions: ['.js', '.ts'],
-        alias: process.env.WEBPACK4
-          ? {
-              webpack: 'webpack4',
-            }
-          : {},
       },
       output: {
         path: path.resolve(
@@ -41,6 +35,7 @@ module.exports = (env = {}) => {
         ),
         filename: '[name].js',
         publicPath: '/dist/',
+        cssFilename: '[name].css',
         libraryTarget: isServerBuild ? 'commonjs' : undefined,
       },
       externals: isServerBuild
@@ -59,6 +54,7 @@ module.exports = (env = {}) => {
             test: /\.vue$/,
             loader: 'vue-loader',
             options: {
+              experimentalInlineMatchResource: true,
               // reactivityTransform: true,
               compilerOptions: {
                 isCustomElement: (tag) => tag.startsWith('custom-'),
@@ -67,26 +63,17 @@ module.exports = (env = {}) => {
           },
           {
             test: /\.png$/,
-            use: [
-              {
-                loader: 'url-loader',
-                options: {
-                  limit: 8192,
-                },
-              },
-            ],
+            type: 'asset/resource',
           },
           {
             test: /\.css$/,
-            use: [MiniCssExtractPlugin.loader, 'css-loader'],
+            type: 'css',
           },
           {
             test: /\.ts$/,
             use: [
               {
-                loader: process.env.WEBPACK4
-                  ? require.resolve('ts-loader')
-                  : require.resolve('ts-loader-v9'),
+                loader: require.resolve('ts-loader'),
                 options: {
                   transpileOnly: true,
                   appendTsSuffixTo: [/\.vue$/],
@@ -103,9 +90,6 @@ module.exports = (env = {}) => {
       },
       plugins: [
         new VueLoaderPlugin(),
-        new MiniCssExtractPlugin({
-          filename: '[name].css',
-        }),
         new webpack.DefinePlugin({
           __IS_SSR__: !!isSSR,
           __VUE_OPTIONS_API__: true,
@@ -116,11 +100,19 @@ module.exports = (env = {}) => {
       optimization: {
         minimize,
       },
+      experiments: {
+        css: true,
+        html: true,
+      },
       devServer: {
         hot: true,
         stats: 'minimal',
-        contentBase: __dirname,
-        overlay: true,
+        static: {
+          directory: __dirname,
+        },
+        client: {
+          overlay: true,
+        },
       },
       resolveLoader: {
         alias: {
